@@ -61,6 +61,8 @@ export default async function Login(props: { searchParams: Promise<Message> }) {
               />
             </div>
 
+            <FormMessage message={searchParams} />
+
             <SubmitButton
               pendingText="Signing In..."
               formAction={signInAction}
@@ -68,8 +70,6 @@ export default async function Login(props: { searchParams: Promise<Message> }) {
             >
               Sign in
             </SubmitButton>
-
-            <FormMessage message={searchParams} />
           </form>
 
           <div className="text-center mt-6">

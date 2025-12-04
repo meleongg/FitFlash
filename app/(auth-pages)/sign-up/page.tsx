@@ -118,6 +118,8 @@ export default async function Signup(props: {
               </div>
             </div>
 
+            <FormMessage message={searchParams} />
+
             <SubmitButton
               pendingText="Signing up..."
               formAction={signUpAction}
@@ -125,8 +127,6 @@ export default async function Signup(props: {
             >
               Create account
             </SubmitButton>
-
-            <FormMessage message={searchParams} />
           </form>
 
           <div className="text-center mt-6">
