@@ -153,8 +153,11 @@ export default function WorkoutSession() {
       sets: number;
       reps: number;
       weight: number;
+      volume: number;
       selected: boolean;
-      isPR: boolean;
+      isWeightPR: boolean;
+      isRepsPR: boolean;
+      isVolumePR: boolean;
       manuallyEdited: boolean;
     };
   }>({});
@@ -571,8 +574,11 @@ export default function WorkoutSession() {
         sets: number;
         reps: number;
         weight: number;
+        volume: number;
         selected: boolean;
-        isPR: boolean;
+        isWeightPR: boolean;
+        isRepsPR: boolean;
+        isVolumePR: boolean;
         manuallyEdited: boolean;
       };
     } = {};
@@ -582,12 +588,19 @@ export default function WorkoutSession() {
 
     const { data: existingPRs } = await supabase
       .from("analytics")
-      .select("exercise_id, max_weight")
+      .select("exercise_id, max_weight, max_reps, max_volume")
       .eq("user_id", user.id);
 
-    const prMap = new Map();
+    const prMap = new Map<
+      string,
+      { maxWeight: number; maxReps: number; maxVolume: number }
+    >();
     existingPRs?.forEach((pr) => {
-      prMap.set(`${pr.exercise_id}`, pr.max_weight || 0);
+      prMap.set(`${pr.exercise_id}`, {
+        maxWeight: pr.max_weight || 0,
+        maxReps: pr.max_reps || 0,
+        maxVolume: pr.max_volume || 0,
+      });
     });
 
     const originalExerciseIds = new Set(
@@ -610,7 +623,7 @@ export default function WorkoutSession() {
       }
     });
 
-    // Calculate suggested updates with better PR detection
+    // Calculate suggested updates with comprehensive PR detection
     sessionExercises.forEach((exercise) => {
       const completedSets = exercise.actualSets.filter((set) => set.completed);
       const isNewExercise = !originalExerciseIds.has(exercise.id);
@@ -621,8 +634,23 @@ export default function WorkoutSession() {
           ...completedSets.map((set) => set.weight || 0)
         );
         const bestReps = Math.max(...completedSets.map((set) => set.reps || 0));
+        // Best single-set volume (standard fitness metric)
+        const bestVolume = Math.max(
+          ...completedSets.map((set) => (set.weight || 0) * (set.reps || 0))
+        );
 
-        const isPR = bestWeight > (prMap.get(exercise.id) || 0);
+        // Get existing PRs for this exercise
+        const existingPR = prMap.get(exercise.id) || {
+          maxWeight: 0,
+          maxReps: 0,
+          maxVolume: 0,
+        };
+
+        // Check each PR type
+        const isWeightPR = bestWeight > existingPR.maxWeight;
+        const isRepsPR = bestReps > existingPR.maxReps;
+        const isVolumePR = bestVolume > existingPR.maxVolume;
+        const hasAnyPR = isWeightPR || isRepsPR || isVolumePR;
 
         if (isNewExercise) {
           // This is a new exercise added during session
@@ -637,7 +665,7 @@ export default function WorkoutSession() {
         } else {
           // This is an existing exercise - check for updates
           const shouldUpdate =
-            isPR ||
+            hasAnyPR ||
             completedSets.length !== exercise.targetSets ||
             bestReps !== exercise.targetReps ||
             bestWeight > exercise.targetWeight;
@@ -651,8 +679,11 @@ export default function WorkoutSession() {
             sets: completedSets.length,
             reps: bestReps,
             weight: bestWeight,
+            volume: bestVolume,
             selected: shouldUpdate,
-            isPR,
+            isWeightPR,
+            isRepsPR,
+            isVolumePR,
             manuallyEdited: false,
           };
         }
@@ -818,7 +849,7 @@ export default function WorkoutSession() {
         }
       }
 
-      // 3. Handle updates to EXISTING exercises (original logic)
+      // 3. Handle updates to EXISTING exercises and PR tracking
       const selectedUpdates = Object.entries(workoutUpdates)
         .filter(([_, data]) => data.selected)
         .map(([exerciseId, data]) => ({
@@ -827,7 +858,10 @@ export default function WorkoutSession() {
           sets: data.sets,
           reps: data.reps,
           weight: data.weight,
-          isPR: data.isPR,
+          volume: data.volume,
+          isWeightPR: data.isWeightPR,
+          isRepsPR: data.isRepsPR,
+          isVolumePR: data.isVolumePR,
         }));
 
       if (selectedUpdates.length > 0) {
@@ -845,24 +879,37 @@ export default function WorkoutSession() {
 
           updateCount++;
 
-          // If this is a PR, update the analytics table
-          if (update.isPR) {
+          // If any PR was achieved, update the analytics table
+          const hasAnyPR =
+            update.isWeightPR || update.isRepsPR || update.isVolumePR;
+          if (hasAnyPR) {
             try {
-              const numericWeight = Number(update.weight) || 0;
-              const numericReps = Number(update.reps) || 0;
+              // First, get existing analytics to only update fields that are actually PRs
+              const { data: existingAnalytics } = await supabase
+                .from("analytics")
+                .select("max_weight, max_reps, max_volume")
+                .eq("user_id", user.id)
+                .eq("exercise_id", update.exercise_id)
+                .single();
 
-              // Calculate volume (weight × reps)
-              const volume = numericWeight * numericReps;
+              const currentMaxWeight = existingAnalytics?.max_weight || 0;
+              const currentMaxReps = existingAnalytics?.max_reps || 0;
+              const currentMaxVolume = existingAnalytics?.max_volume || 0;
 
-              const { data, error: analyticsError } = await supabase
+              const { error: analyticsError } = await supabase
                 .from("analytics")
                 .upsert(
                   {
                     user_id: user.id,
                     exercise_id: update.exercise_id,
-                    max_weight: numericWeight,
-                    max_reps: numericReps,
-                    max_volume: volume,
+                    // Only update if it's actually a PR, otherwise keep existing
+                    max_weight: update.isWeightPR
+                      ? update.weight
+                      : currentMaxWeight,
+                    max_reps: update.isRepsPR ? update.reps : currentMaxReps,
+                    max_volume: update.isVolumePR
+                      ? update.volume
+                      : currentMaxVolume,
                     updated_at: new Date().toISOString(),
                   },
                   {
@@ -876,6 +923,43 @@ export default function WorkoutSession() {
             } catch (err) {
               console.error("Exception in analytics update:", err);
             }
+          }
+        }
+      }
+
+      // 4. Also update analytics for NEW exercises being added (first-time PRs)
+      for (const [exerciseId, data] of Object.entries(newExercisesToAdd)) {
+        // Track analytics for selected exercises that have some activity (reps > 0 or weight > 0)
+        if (data.selected && (data.weight > 0 || data.reps > 0)) {
+          try {
+            const volume = data.weight * data.reps;
+            const { error: analyticsError } = await supabase
+              .from("analytics")
+              .upsert(
+                {
+                  user_id: user.id,
+                  exercise_id: exerciseId,
+                  max_weight: data.weight,
+                  max_reps: data.reps,
+                  max_volume: volume,
+                  updated_at: new Date().toISOString(),
+                },
+                {
+                  onConflict: "user_id,exercise_id",
+                }
+              );
+
+            if (analyticsError) {
+              console.error(
+                "Analytics update error for new exercise:",
+                analyticsError
+              );
+            }
+          } catch (err) {
+            console.error(
+              "Exception in analytics update for new exercise:",
+              err
+            );
           }
         }
       }
@@ -1950,7 +2034,11 @@ export default function WorkoutSession() {
                       </div>
                       <p className="text-xs text-default-500 ml-6">
                         Update the default sets, reps, and weight for these
-                        exercises based on your performance.
+                        exercises.
+                        <span className="text-primary font-medium">
+                          {" "}
+                          Tap the values below to edit them.
+                        </span>
                       </p>
                       {Object.entries(workoutUpdates).map(
                         ([exerciseId, update]) => {
@@ -1995,22 +2083,32 @@ export default function WorkoutSession() {
                                   </span>
                                 </div>
 
-                                {/* Mobile-responsive PR display */}
-                                <div className="flex flex-wrap justify-end ml-8 sm:ml-0">
-                                  {update.isPR && (
+                                {/* Mobile-responsive PR display - clean, non-bloated */}
+                                <div className="flex flex-wrap gap-1 justify-end ml-8 sm:ml-0">
+                                  {(update.isWeightPR ||
+                                    update.isRepsPR ||
+                                    update.isVolumePR) && (
                                     <Chip
                                       color="success"
                                       size="sm"
-                                      className="h-6 text-xs sm:text-sm"
+                                      className="h-6 text-xs"
                                     >
-                                      New Weight PR!
+                                      🏆{" "}
+                                      {[
+                                        update.isWeightPR && "Weight",
+                                        update.isRepsPR && "Reps",
+                                        update.isVolumePR && "Volume",
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")}{" "}
+                                      PR
                                     </Chip>
                                   )}
                                   {update.manuallyEdited && (
                                     <Chip
                                       variant="flat"
                                       size="sm"
-                                      className="h-6 text-xs sm:text-sm ml-1"
+                                      className="h-6 text-xs"
                                     >
                                       Edited
                                     </Chip>
@@ -2026,6 +2124,13 @@ export default function WorkoutSession() {
                                   <Input
                                     size="sm"
                                     type="number"
+                                    variant="bordered"
+                                    classNames={{
+                                      input: "text-center font-medium pr-0",
+                                      inputWrapper:
+                                        "bg-white dark:bg-default-100 hover:border-primary focus-within:border-primary min-h-unit-10",
+                                      innerWrapper: "gap-0",
+                                    }}
                                     value={update.sets.toString()}
                                     onChange={(e) => {
                                       const value = parseInt(
@@ -2041,11 +2146,9 @@ export default function WorkoutSession() {
                                       });
                                     }}
                                     endContent={
-                                      <div className="flex items-center">
-                                        <span className="text-default-400 text-small">
-                                          / {exercise.targetSets}
-                                        </span>
-                                      </div>
+                                      <span className="text-default-400 text-small whitespace-nowrap pl-1">
+                                        / {exercise.targetSets}
+                                      </span>
                                     }
                                   />
                                 </div>
@@ -2057,6 +2160,13 @@ export default function WorkoutSession() {
                                   <Input
                                     size="sm"
                                     type="number"
+                                    variant="bordered"
+                                    classNames={{
+                                      input: "text-center font-medium pr-0",
+                                      inputWrapper:
+                                        "bg-white dark:bg-default-100 hover:border-primary focus-within:border-primary min-h-unit-10",
+                                      innerWrapper: "gap-0",
+                                    }}
                                     value={update.reps.toString()}
                                     onChange={(e) => {
                                       const value = parseInt(
@@ -2072,11 +2182,9 @@ export default function WorkoutSession() {
                                       });
                                     }}
                                     endContent={
-                                      <div className="flex items-center">
-                                        <span className="text-default-400 text-small">
-                                          / {exercise.targetReps}
-                                        </span>
-                                      </div>
+                                      <span className="text-default-400 text-small whitespace-nowrap pl-1">
+                                        / {exercise.targetReps}
+                                      </span>
                                     }
                                   />
                                 </div>
@@ -2088,6 +2196,13 @@ export default function WorkoutSession() {
                                   <Input
                                     size="sm"
                                     type="number"
+                                    variant="bordered"
+                                    classNames={{
+                                      input: "text-center font-medium pr-0",
+                                      inputWrapper:
+                                        "bg-white dark:bg-default-100 hover:border-primary focus-within:border-primary min-h-unit-10",
+                                      innerWrapper: "gap-0",
+                                    }}
                                     value={convertFromStorageUnit(
                                       update.weight,
                                       useMetric
@@ -2111,11 +2226,9 @@ export default function WorkoutSession() {
                                       });
                                     }}
                                     endContent={
-                                      <div className="flex items-center">
-                                        <span className="text-default-400 text-small">
-                                          {useMetric ? "kg" : "lbs"}
-                                        </span>
-                                      </div>
+                                      <span className="text-default-400 text-small whitespace-nowrap pl-1">
+                                        {useMetric ? "kg" : "lbs"}
+                                      </span>
                                     }
                                   />
                                 </div>
@@ -2524,8 +2637,11 @@ export default function WorkoutSession() {
                         sets: number;
                         reps: number;
                         weight: number;
+                        volume: number;
                         selected: boolean;
-                        isPR: boolean;
+                        isWeightPR: boolean;
+                        isRepsPR: boolean;
+                        isVolumePR: boolean;
                         manuallyEdited: boolean;
                       };
                     } = {};
@@ -2535,13 +2651,20 @@ export default function WorkoutSession() {
 
                     const { data: existingPRs } = await supabase
                       .from("analytics")
-                      .select("exercise_id, max_weight")
+                      .select("exercise_id, max_weight, max_reps, max_volume")
                       .eq("user_id", user.id);
 
                     // Create a more detailed PR map
-                    const prMap = new Map();
+                    const prMap = new Map<
+                      string,
+                      { maxWeight: number; maxReps: number; maxVolume: number }
+                    >();
                     existingPRs?.forEach((pr) => {
-                      prMap.set(`${pr.exercise_id}`, pr.max_weight || 0);
+                      prMap.set(`${pr.exercise_id}`, {
+                        maxWeight: pr.max_weight || 0,
+                        maxReps: pr.max_reps || 0,
+                        maxVolume: pr.max_volume || 0,
+                      });
                     });
 
                     // Get the original workout exercise IDs
@@ -2568,7 +2691,7 @@ export default function WorkoutSession() {
                       }
                     });
 
-                    // Calculate suggested updates with better PR detection
+                    // Calculate suggested updates with comprehensive PR detection
                     sessionExercises.forEach((exercise) => {
                       const completedSets = exercise.actualSets.filter(
                         (set) => set.completed
@@ -2584,8 +2707,21 @@ export default function WorkoutSession() {
                         const bestReps = Math.max(
                           ...completedSets.map((set) => set.reps || 0)
                         );
+                        const bestVolume = Math.max(
+                          ...completedSets.map(
+                            (set) => (set.weight || 0) * (set.reps || 0)
+                          )
+                        );
 
-                        const isPR = bestWeight > (prMap.get(exercise.id) || 0);
+                        const existingPR = prMap.get(exercise.id) || {
+                          maxWeight: 0,
+                          maxReps: 0,
+                          maxVolume: 0,
+                        };
+                        const isWeightPR = bestWeight > existingPR.maxWeight;
+                        const isRepsPR = bestReps > existingPR.maxReps;
+                        const isVolumePR = bestVolume > existingPR.maxVolume;
+                        const hasAnyPR = isWeightPR || isRepsPR || isVolumePR;
 
                         if (isNewExercise) {
                           newExercises[exercise.id] = {
@@ -2598,7 +2734,7 @@ export default function WorkoutSession() {
                           hasUpdatesToSuggest = true;
                         } else {
                           const shouldUpdate =
-                            isPR ||
+                            hasAnyPR ||
                             completedSets.length !== exercise.targetSets ||
                             bestReps !== exercise.targetReps ||
                             bestWeight > exercise.targetWeight;
@@ -2611,8 +2747,11 @@ export default function WorkoutSession() {
                             sets: completedSets.length,
                             reps: bestReps,
                             weight: bestWeight,
+                            volume: bestVolume,
                             selected: shouldUpdate,
-                            isPR,
+                            isWeightPR,
+                            isRepsPR,
+                            isVolumePR,
                             manuallyEdited: false,
                           };
                         }
