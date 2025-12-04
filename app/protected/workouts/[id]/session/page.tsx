@@ -2342,7 +2342,21 @@ export default function WorkoutSession() {
       </Modal>
 
       {/* Cancel Workout Confirmation Modal */}
-      <Modal isOpen={isCancelConfirmOpen} onClose={onCancelConfirmClose}>
+      <Modal
+        isOpen={isCancelConfirmOpen}
+        onClose={onCancelConfirmClose}
+        backdrop="opaque"
+        placement="center"
+        size="sm"
+        classNames={{
+          base: "max-w-[95%] sm:max-w-md mx-auto",
+          wrapper: "items-center justify-center pb-20", // pb-20 accounts for bottom navbar
+          header: "pb-0",
+          body: "px-6 py-5",
+          footer: "pt-3 px-6 pb-5 flex flex-col gap-2",
+          closeButton: "top-3 right-3",
+        }}
+      >
         <ModalContent>
           {(onClose) => (
             <>
