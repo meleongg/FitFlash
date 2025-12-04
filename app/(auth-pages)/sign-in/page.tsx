@@ -20,7 +20,7 @@ export default async function Login(props: { searchParams: Promise<Message> }) {
             </div>
             <h1 className="text-2xl font-bold">Welcome back</h1>
             <p className="text-sm text-gray-700 mt-1">
-              Sign in to continue to FitFlow
+              Sign in to continue to FitFlash
             </p>
           </div>
 

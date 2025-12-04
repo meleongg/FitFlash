@@ -54,7 +54,7 @@ const SessionContext = createContext<SessionContextProps | undefined>(
   undefined
 );
 
-export const SESSION_STORAGE_KEY = "fitflow-active-session";
+export const SESSION_STORAGE_KEY = "FitFlash-active-session";
 
 export const SessionProvider = ({ children }: { children: ReactNode }) => {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(

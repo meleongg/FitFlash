@@ -20,7 +20,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "FitFlow - Fitness Tracking App",
+  title: "FitFlash - Fitness Tracking App",
   description:
     "Track your workouts and fitness progress with a simple, intuitive interface",
   manifest: "/manifest.json",
@@ -32,23 +32,23 @@ export const metadata: Metadata = {
     "gym progress",
     "fitness goals",
   ],
-  applicationName: "FitFlow",
+  applicationName: "FitFlash",
 
   // Open Graph / Facebook
   openGraph: {
     type: "website",
     locale: "en_US",
     url: defaultUrl,
-    title: "FitFlow - Your Personal Fitness Journey",
+    title: "FitFlash - Your Personal Fitness Journey",
     description:
       "Track workouts, set goals, and visualize your fitness progress over time",
-    siteName: "FitFlow",
+    siteName: "FitFlash",
     images: [
       {
-        url: "/images/fitflow-og-image.png", // Create this 1200×630px image
+        url: "/images/FitFlash-og-image.png", // Create this 1200×630px image
         width: 1200,
         height: 630,
-        alt: "FitFlow App Dashboard",
+        alt: "FitFlash App Dashboard",
       },
     ],
   },
@@ -56,15 +56,15 @@ export const metadata: Metadata = {
   // Twitter
   twitter: {
     card: "summary_large_image",
-    title: "FitFlow - Fitness Tracking Made Simple",
+    title: "FitFlash - Fitness Tracking Made Simple",
     description: "Easily track workouts and monitor your fitness journey",
-    images: ["/images/fitflow-twitter-image.png"],
+    images: ["/images/FitFlash-twitter-image.png"],
   },
 
   // Additional SEO metadata
   authors: [{ name: "Melvin Teo" }],
   creator: "Melvin Teo",
-  publisher: "FitFlow",
+  publisher: "FitFlash",
   category: "Fitness & Health",
 
   // Rest of your existing metadata
@@ -74,7 +74,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "FitFlow",
+    title: "FitFlash",
   },
   icons: {
     icon: [

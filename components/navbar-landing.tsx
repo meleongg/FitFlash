@@ -13,7 +13,7 @@ export default function NavbarLanding() {
     <Navbar className="bg-white shadow-sm justify-space-between">
       <NavbarBrand>
         <Link href="/" passHref>
-          <NextUILink className="font-bold text-gray-900">FitFlow</NextUILink>
+          <NextUILink className="font-bold text-gray-900">FitFlash</NextUILink>
         </Link>
       </NavbarBrand>
       <NavbarContent justify="end">

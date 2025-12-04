@@ -39,7 +39,7 @@ export default async function Signup(props: {
             </div>
             <h1 className="text-2xl font-bold">Create an account</h1>
             <p className="text-sm text-gray-700 mt-1">
-              Start your fitness journey with FitFlow
+              Start your fitness journey with FitFlash
             </p>
           </div>
 

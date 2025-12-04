@@ -33,9 +33,9 @@ export default function LogoutButton() {
   const clearAppLocalStorage = () => {
     // Clear specific keys
     const keysToRemove = [
-      "fitflow-active-session",
+      "FitFlash-active-session",
       "rest-timer-duration",
-      "fitflow-theme",
+      "FitFlash-theme",
       // Add any other app-specific keys here
     ];
 

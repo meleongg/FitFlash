@@ -1,6 +1,6 @@
 {
-  "name": "FitFlow",
-  "short_name": "FitFlow",
+  "name": "FitFlash",
+  "short_name": "FitFlash",
   "description": "A Progressive Web App built with Next.js",
   "start_url": "/",
   "id": "/",

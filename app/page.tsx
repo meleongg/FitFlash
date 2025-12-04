@@ -19,7 +19,7 @@ export default async function Home() {
               <div className="bg-primary p-2 rounded-full">
                 <Dumbbell className="h-5 w-5 text-white" />
               </div>
-              <span className="ml-2 text-xl font-bold">FitFlow</span>
+              <span className="ml-2 text-xl font-bold">FitFlash</span>
             </div>
             <div className="flex items-center gap-4">
               <Link
@@ -51,8 +51,8 @@ export default async function Home() {
             Track Your Fitness Journey with Ease
           </h1>
           <p className="text-xl text-gray-700 mb-8 max-w-2xl mx-auto">
-            FitFlow helps you track workouts, monitor progress, and achieve your
-            fitness goals with a simple, intuitive interface.
+            FitFlash helps you track workouts, monitor progress, and achieve
+            your fitness goals with a simple, intuitive interface.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
@@ -75,7 +75,7 @@ export default async function Home() {
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold mb-4">Everything You Need</h2>
             <p className="text-gray-700 max-w-2xl mx-auto">
-              FitFlow provides all the tools you need to track and improve your
+              FitFlash provides all the tools you need to track and improve your
               fitness journey
             </p>
           </div>
@@ -173,8 +173,7 @@ export default async function Home() {
               Ready to start your fitness journey?
             </h2>
             <p className="text-lg mb-8 opacity-90">
-              Join thousands of users who are already tracking their fitness
-              progress with FitFlow.
+              Get started with tracking your fitness progress with FitFlash.
             </p>
             <Link
               href="/sign-up"
@@ -194,11 +193,11 @@ export default async function Home() {
               <div className="bg-primary p-2 rounded-full">
                 <Dumbbell className="h-5 w-5 text-white" />
               </div>
-              <span className="ml-2 text-xl font-bold">FitFlow</span>
+              <span className="ml-2 text-xl font-bold">FitFlash</span>
             </div>
             <div className="flex flex-col items-center md:items-end">
               <p className="text-gray-700 text-sm mb-2">
-                © 2025 FitFlow. All rights reserved.
+                © 2025 FitFlash. All rights reserved.
               </p>
               <div className="flex gap-4">
                 <Link

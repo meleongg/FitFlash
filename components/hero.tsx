@@ -4,7 +4,7 @@ import Link from "next/link";
 export default function Hero() {
   return (
     <div className="flex flex-col items-center py-12">
-      <h1 className="text-4xl font-bold mb-4">Welcome to FitFlow</h1>
+      <h1 className="text-4xl font-bold mb-4">Welcome to FitFlash</h1>
       <p className="text-lg mb-8 text-center max-w-md">
         Your ultimate workout library app. Track your sessions, analyze your
         progress, and stay motivated.

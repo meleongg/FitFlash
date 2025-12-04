@@ -1,6 +1,6 @@
 import { openDB } from "idb";
 
-const DB_NAME = "fitflow-offline";
+const DB_NAME = "FitFlash-offline";
 const DB_VERSION = 1;
 
 // TODO: may possibly need to store user_id; unless workout_id -> user_id
