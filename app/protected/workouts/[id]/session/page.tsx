@@ -163,6 +163,23 @@ export default function WorkoutSession() {
   const [incompleteExercisesNames, setIncompleteExercisesNames] =
     useState<string>("");
 
+  // Track exercises added/removed during the session
+  const [newExercisesToAdd, setNewExercisesToAdd] = useState<{
+    [exerciseId: string]: {
+      name: string;
+      sets: number;
+      reps: number;
+      weight: number;
+      selected: boolean;
+    };
+  }>({});
+  const [exercisesToRemove, setExercisesToRemove] = useState<{
+    [exerciseId: string]: {
+      name: string;
+      selected: boolean;
+    };
+  }>({});
+
   const PAGE_SIZE = 5;
 
   const {
@@ -573,9 +590,31 @@ export default function WorkoutSession() {
       prMap.set(`${pr.exercise_id}`, pr.max_weight || 0);
     });
 
+    const originalExerciseIds = new Set(
+      workoutExercises.map((ex: any) => ex.id)
+    );
+    const newExercises: typeof newExercisesToAdd = {};
+    const removedExercises: typeof exercisesToRemove = {};
+
+    // Find exercises that were in the original workout but removed during session
+    workoutExercises.forEach((originalEx: any) => {
+      const stillExists = sessionExercises.some(
+        (ex) => ex.id === originalEx.id
+      );
+      if (!stillExists) {
+        removedExercises[originalEx.id] = {
+          name: originalEx.name,
+          selected: true, // Default to selected for removal
+        };
+        hasUpdatesToSuggest = true;
+      }
+    });
+
     // Calculate suggested updates with better PR detection
     sessionExercises.forEach((exercise) => {
       const completedSets = exercise.actualSets.filter((set) => set.completed);
+      const isNewExercise = !originalExerciseIds.has(exercise.id);
+
       if (completedSets.length > 0) {
         // Get the best metrics from completed sets
         const bestWeight = Math.max(
@@ -585,31 +624,55 @@ export default function WorkoutSession() {
 
         const isPR = bestWeight > (prMap.get(exercise.id) || 0);
 
-        // Define shouldUpdate - typically we should update if there's a PR or significant change
-        const shouldUpdate =
-          isPR ||
-          completedSets.length !== exercise.targetSets ||
-          bestReps !== exercise.targetReps ||
-          bestWeight > exercise.targetWeight;
-
-        // Flag if we have any updates to suggest (used for modal display logic)
-        if (shouldUpdate) {
+        if (isNewExercise) {
+          // This is a new exercise added during session
+          newExercises[exercise.id] = {
+            name: exercise.name,
+            sets: completedSets.length,
+            reps: bestReps,
+            weight: bestWeight,
+            selected: true, // Default to selected for adding
+          };
           hasUpdatesToSuggest = true;
-        }
+        } else {
+          // This is an existing exercise - check for updates
+          const shouldUpdate =
+            isPR ||
+            completedSets.length !== exercise.targetSets ||
+            bestReps !== exercise.targetReps ||
+            bestWeight > exercise.targetWeight;
 
-        updates[exercise.id] = {
-          sets: completedSets.length,
-          reps: bestReps,
-          weight: bestWeight,
-          selected: shouldUpdate,
-          isPR,
-          manuallyEdited: false,
+          // Flag if we have any updates to suggest (used for modal display logic)
+          if (shouldUpdate) {
+            hasUpdatesToSuggest = true;
+          }
+
+          updates[exercise.id] = {
+            sets: completedSets.length,
+            reps: bestReps,
+            weight: bestWeight,
+            selected: shouldUpdate,
+            isPR,
+            manuallyEdited: false,
+          };
+        }
+      } else if (isNewExercise) {
+        // New exercise with no completed sets - still offer to add it
+        newExercises[exercise.id] = {
+          name: exercise.name,
+          sets: exercise.targetSets,
+          reps: exercise.targetReps,
+          weight: exercise.targetWeight,
+          selected: false, // Default to not selected since no sets completed
         };
+        hasUpdatesToSuggest = true;
       }
     });
 
     if (hasUpdatesToSuggest) {
       setWorkoutUpdates(updates);
+      setNewExercisesToAdd(newExercises);
+      setExercisesToRemove(removedExercises);
       setShowUpdateWorkoutModal(true);
     } else {
       // If no updates to suggest, proceed with normal flow
@@ -692,9 +755,70 @@ export default function WorkoutSession() {
   // Add this function to handle workout updates
   const handleWorkoutUpdate = async () => {
     try {
-      const toastId = toast.loading("Updating workout defaults...");
+      const toastId = toast.loading("Updating workout...");
+      let updateCount = 0;
 
-      // Filter selected exercises
+      // 1. Handle NEW exercises to add to the workout
+      const exercisesToAdd = Object.entries(newExercisesToAdd)
+        .filter(([_, data]) => data.selected)
+        .map(([exerciseId, data]) => ({
+          exercise_id: exerciseId,
+          ...data,
+        }));
+
+      if (exercisesToAdd.length > 0) {
+        // Get the current max exercise_order
+        const { data: existingOrders } = await supabase
+          .from("workout_exercises")
+          .select("exercise_order")
+          .eq("workout_id", workoutId)
+          .order("exercise_order", { ascending: false })
+          .limit(1);
+
+        let nextOrder = (existingOrders?.[0]?.exercise_order ?? -1) + 1;
+
+        for (const exercise of exercisesToAdd) {
+          const { error: insertError } = await supabase
+            .from("workout_exercises")
+            .insert({
+              workout_id: workoutId,
+              exercise_id: exercise.exercise_id,
+              sets: exercise.sets,
+              reps: exercise.reps,
+              weight: exercise.weight,
+              exercise_order: nextOrder++,
+            });
+
+          if (insertError) {
+            console.error("Error adding exercise to workout:", insertError);
+          } else {
+            updateCount++;
+          }
+        }
+      }
+
+      // 2. Handle exercises to REMOVE from the workout
+      const exercisesToRemoveList = Object.entries(exercisesToRemove)
+        .filter(([_, data]) => data.selected)
+        .map(([exerciseId]) => exerciseId);
+
+      if (exercisesToRemoveList.length > 0) {
+        for (const exerciseId of exercisesToRemoveList) {
+          const { error: deleteError } = await supabase
+            .from("workout_exercises")
+            .delete()
+            .eq("workout_id", workoutId)
+            .eq("exercise_id", exerciseId);
+
+          if (deleteError) {
+            console.error("Error removing exercise from workout:", deleteError);
+          } else {
+            updateCount++;
+          }
+        }
+      }
+
+      // 3. Handle updates to EXISTING exercises (original logic)
       const selectedUpdates = Object.entries(workoutUpdates)
         .filter(([_, data]) => data.selected)
         .map(([exerciseId, data]) => ({
@@ -718,6 +842,8 @@ export default function WorkoutSession() {
             })
             .eq("workout_id", update.workout_id)
             .eq("exercise_id", update.exercise_id);
+
+          updateCount++;
 
           // If this is a PR, update the analytics table
           if (update.isPR) {
@@ -752,14 +878,13 @@ export default function WorkoutSession() {
             }
           }
         }
+      }
 
-        toast.dismiss(toastId);
-        toast.success(
-          `Updated ${selectedUpdates.length} exercises in your workout`
-        );
+      toast.dismiss(toastId);
+      if (updateCount > 0) {
+        toast.success(`Updated workout with ${updateCount} change(s)`);
       } else {
-        toast.dismiss(toastId);
-        toast.info("No workout updates selected");
+        toast.info("No workout changes applied");
       }
 
       // Instead of trying to access session.id directly, call finalizeSession
@@ -768,7 +893,7 @@ export default function WorkoutSession() {
       await finalizeSession(endTime);
     } catch (error: any) {
       console.error("Error updating workout:", error);
-      toast.error("Failed to update workout defaults");
+      toast.error("Failed to update workout");
 
       // Still finalize the session even if updates fail
       await finalizeSession(new Date().toISOString());
@@ -1695,214 +1820,349 @@ export default function WorkoutSession() {
           {(onClose) => (
             <>
               <ModalHeader className="flex flex-col gap-1 pb-3">
-                <h2 className="text-xl">Update Workout Defaults</h2>
+                <h2 className="text-xl">Update Workout</h2>
               </ModalHeader>
               <ModalBody>
                 <p className="text-sm text-default-500 mb-5">
-                  Would you like to update your workout defaults based on
-                  today's performance? Select the exercises you want to update:
+                  Would you like to update your workout based on today's
+                  session?
                 </p>
 
-                <div className="space-y-4 pb-16">
-                  {" "}
-                  {/* Added bottom padding to ensure content is visible above fixed footer */}
-                  {Object.entries(workoutUpdates).map(
-                    ([exerciseId, update]) => {
-                      // Find the exercise in sessionExercises to get the name
-                      const exercise = sessionExercises.find(
-                        (ex) => ex.id === exerciseId
-                      );
-                      if (!exercise) return null;
-
-                      // Change this isDifferent logic to be separate from PR detection:
-                      const isDifferent =
-                        update.sets !== exercise.targetSets ||
-                        update.reps !== exercise.targetReps ||
-                        update.weight !== exercise.targetWeight;
-
-                      return (
-                        <div
-                          key={exerciseId}
-                          className={`p-4 rounded-lg border ${
-                            isDifferent
-                              ? "border-primary/30 bg-primary/5"
-                              : "border-default-200"
-                          }`}
-                        >
-                          {/* Replace the current PR display with this mobile-responsive version */}
-                          <div className="flex flex-col sm:flex-row justify-between gap-2 mb-3">
-                            <div className="flex items-center gap-2">
+                <div className="space-y-6 pb-16">
+                  {/* Section 1: New Exercises to Add */}
+                  {Object.keys(newExercisesToAdd).length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Plus className="h-4 w-4 text-success" />
+                        <h3 className="font-semibold text-success">
+                          Add New Exercises to Workout
+                        </h3>
+                      </div>
+                      <p className="text-xs text-default-500 ml-6">
+                        These exercises were added during your session. Select
+                        to permanently add them to this workout.
+                      </p>
+                      {Object.entries(newExercisesToAdd).map(
+                        ([exerciseId, data]) => (
+                          <div
+                            key={exerciseId}
+                            className="p-4 rounded-lg border border-success/30 bg-success/5"
+                          >
+                            <div className="flex items-center gap-2 mb-3">
                               <Checkbox
-                                isSelected={update.selected}
+                                isSelected={data.selected}
+                                color="success"
                                 onValueChange={(isSelected) => {
-                                  setWorkoutUpdates({
-                                    ...workoutUpdates,
+                                  setNewExercisesToAdd({
+                                    ...newExercisesToAdd,
                                     [exerciseId]: {
-                                      ...update,
+                                      ...data,
                                       selected: isSelected,
                                     },
                                   });
                                 }}
                               />
-                              <span className="font-medium truncate max-w-[180px] sm:max-w-full">
-                                {exercise.name}
-                              </span>
+                              <span className="font-medium">{data.name}</span>
+                              <Chip size="sm" color="success" variant="flat">
+                                New
+                              </Chip>
                             </div>
-
-                            {/* Mobile-responsive PR display */}
-                            <div className="flex flex-wrap justify-end ml-8 sm:ml-0">
-                              {update.isPR && (
-                                <Chip
-                                  color="success"
-                                  size="sm"
-                                  className="h-6 text-xs sm:text-sm"
-                                >
-                                  New Weight PR!
-                                </Chip>
-                              )}
-                              {update.manuallyEdited && (
-                                <Chip
-                                  variant="flat"
-                                  size="sm"
-                                  className="h-6 text-xs sm:text-sm ml-1"
-                                >
-                                  Edited
-                                </Chip>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="pl-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="space-y-1">
-                              <p className="text-xs text-default-500">Sets:</p>
-                              <Input
-                                size="sm"
-                                type="number"
-                                value={update.sets.toString()}
-                                onChange={(e) => {
-                                  const value = parseInt(e.target.value || "0");
-                                  setWorkoutUpdates({
-                                    ...workoutUpdates,
-                                    [exerciseId]: {
-                                      ...update,
-                                      sets: value,
-                                      manuallyEdited: true,
-                                    },
-                                  });
-                                }}
-                                endContent={
-                                  <div className="flex items-center">
-                                    <span className="text-default-400 text-small">
-                                      / {exercise.targetSets}
-                                    </span>
-                                  </div>
-                                }
-                              />
-                            </div>
-
-                            <div className="space-y-1">
-                              <p className="text-xs text-default-500">Reps:</p>
-                              <Input
-                                size="sm"
-                                type="number"
-                                value={update.reps.toString()}
-                                onChange={(e) => {
-                                  const value = parseInt(e.target.value || "0");
-                                  setWorkoutUpdates({
-                                    ...workoutUpdates,
-                                    [exerciseId]: {
-                                      ...update,
-                                      reps: value,
-                                      manuallyEdited: true,
-                                    },
-                                  });
-                                }}
-                                endContent={
-                                  <div className="flex items-center">
-                                    <span className="text-default-400 text-small">
-                                      / {exercise.targetReps}
-                                    </span>
-                                  </div>
-                                }
-                              />
-                            </div>
-
-                            <div className="space-y-1">
-                              <p className="text-xs text-default-500">
-                                Weight:
-                              </p>
-                              <Input
-                                size="sm"
-                                type="number"
-                                value={convertFromStorageUnit(
-                                  update.weight,
-                                  useMetric
-                                ).toFixed(1)}
-                                onChange={(e) => {
-                                  const displayValue = parseFloat(
-                                    e.target.value || "0"
-                                  );
-                                  const storageValue = convertToStorageUnit(
-                                    displayValue,
-                                    useMetric
-                                  );
-
-                                  setWorkoutUpdates({
-                                    ...workoutUpdates,
-                                    [exerciseId]: {
-                                      ...update,
-                                      weight: storageValue,
-                                      manuallyEdited: true,
-                                    },
-                                  });
-                                }}
-                                endContent={
-                                  <div className="flex items-center">
-                                    <span className="text-default-400 text-small">
-                                      {useMetric ? "kg" : "lbs"}
-                                    </span>
-                                  </div>
-                                }
-                              />
-                            </div>
-                          </div>
-
-                          {/* Show the changes against workout defaults separately */}
-                          {isDifferent && (
-                            <div className="mt-3 pl-7 text-xs text-default-500">
-                              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                                <span>Changes from workout defaults:</span>
-                                {update.sets !== exercise.targetSets && (
-                                  <span>
-                                    Sets: {exercise.targetSets} →{" "}
-                                    <strong>{update.sets}</strong>
-                                  </span>
-                                )}
-                                {update.reps !== exercise.targetReps && (
-                                  <span>
-                                    Reps: {exercise.targetReps} →{" "}
-                                    <strong>{update.reps}</strong>
-                                  </span>
-                                )}
-                                {update.weight !== exercise.targetWeight && (
-                                  <span>
-                                    Weight:{" "}
-                                    {displayWeight(
-                                      exercise.targetWeight,
-                                      useMetric
-                                    )}{" "}
-                                    →{" "}
-                                    <strong>
-                                      {displayWeight(update.weight, useMetric)}
-                                    </strong>
-                                  </span>
-                                )}
+                            <div className="pl-7 grid grid-cols-3 gap-3 text-sm text-default-600">
+                              <div>
+                                <span className="text-xs text-default-400">
+                                  Sets:
+                                </span>{" "}
+                                <span className="font-medium">{data.sets}</span>
+                              </div>
+                              <div>
+                                <span className="text-xs text-default-400">
+                                  Reps:
+                                </span>{" "}
+                                <span className="font-medium">{data.reps}</span>
+                              </div>
+                              <div>
+                                <span className="text-xs text-default-400">
+                                  Weight:
+                                </span>{" "}
+                                <span className="font-medium">
+                                  {displayWeight(data.weight, useMetric)}
+                                </span>
                               </div>
                             </div>
-                          )}
-                        </div>
-                      );
-                    }
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+
+                  {/* Section 2: Exercises to Remove */}
+                  {Object.keys(exercisesToRemove).length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Trash2 className="h-4 w-4 text-danger" />
+                        <h3 className="font-semibold text-danger">
+                          Remove Exercises from Workout
+                        </h3>
+                      </div>
+                      <p className="text-xs text-default-500 ml-6">
+                        These exercises were removed during your session. Select
+                        to permanently remove them from this workout.
+                      </p>
+                      {Object.entries(exercisesToRemove).map(
+                        ([exerciseId, data]) => (
+                          <div
+                            key={exerciseId}
+                            className="p-4 rounded-lg border border-danger/30 bg-danger/5"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                isSelected={data.selected}
+                                color="danger"
+                                onValueChange={(isSelected) => {
+                                  setExercisesToRemove({
+                                    ...exercisesToRemove,
+                                    [exerciseId]: {
+                                      ...data,
+                                      selected: isSelected,
+                                    },
+                                  });
+                                }}
+                              />
+                              <span className="font-medium">{data.name}</span>
+                              <Chip size="sm" color="danger" variant="flat">
+                                Remove
+                              </Chip>
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+
+                  {/* Section 3: Update Existing Exercises */}
+                  {Object.keys(workoutUpdates).length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Dumbbell className="h-4 w-4 text-primary" />
+                        <h3 className="font-semibold">
+                          Update Exercise Defaults
+                        </h3>
+                      </div>
+                      <p className="text-xs text-default-500 ml-6">
+                        Update the default sets, reps, and weight for these
+                        exercises based on your performance.
+                      </p>
+                      {Object.entries(workoutUpdates).map(
+                        ([exerciseId, update]) => {
+                          // Find the exercise in sessionExercises to get the name
+                          const exercise = sessionExercises.find(
+                            (ex) => ex.id === exerciseId
+                          );
+                          if (!exercise) return null;
+
+                          // Change this isDifferent logic to be separate from PR detection:
+                          const isDifferent =
+                            update.sets !== exercise.targetSets ||
+                            update.reps !== exercise.targetReps ||
+                            update.weight !== exercise.targetWeight;
+
+                          return (
+                            <div
+                              key={exerciseId}
+                              className={`p-4 rounded-lg border ${
+                                isDifferent
+                                  ? "border-primary/30 bg-primary/5"
+                                  : "border-default-200"
+                              }`}
+                            >
+                              {/* Replace the current PR display with this mobile-responsive version */}
+                              <div className="flex flex-col sm:flex-row justify-between gap-2 mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Checkbox
+                                    isSelected={update.selected}
+                                    onValueChange={(isSelected) => {
+                                      setWorkoutUpdates({
+                                        ...workoutUpdates,
+                                        [exerciseId]: {
+                                          ...update,
+                                          selected: isSelected,
+                                        },
+                                      });
+                                    }}
+                                  />
+                                  <span className="font-medium truncate max-w-[180px] sm:max-w-full">
+                                    {exercise.name}
+                                  </span>
+                                </div>
+
+                                {/* Mobile-responsive PR display */}
+                                <div className="flex flex-wrap justify-end ml-8 sm:ml-0">
+                                  {update.isPR && (
+                                    <Chip
+                                      color="success"
+                                      size="sm"
+                                      className="h-6 text-xs sm:text-sm"
+                                    >
+                                      New Weight PR!
+                                    </Chip>
+                                  )}
+                                  {update.manuallyEdited && (
+                                    <Chip
+                                      variant="flat"
+                                      size="sm"
+                                      className="h-6 text-xs sm:text-sm ml-1"
+                                    >
+                                      Edited
+                                    </Chip>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="pl-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                  <p className="text-xs text-default-500">
+                                    Sets:
+                                  </p>
+                                  <Input
+                                    size="sm"
+                                    type="number"
+                                    value={update.sets.toString()}
+                                    onChange={(e) => {
+                                      const value = parseInt(
+                                        e.target.value || "0"
+                                      );
+                                      setWorkoutUpdates({
+                                        ...workoutUpdates,
+                                        [exerciseId]: {
+                                          ...update,
+                                          sets: value,
+                                          manuallyEdited: true,
+                                        },
+                                      });
+                                    }}
+                                    endContent={
+                                      <div className="flex items-center">
+                                        <span className="text-default-400 text-small">
+                                          / {exercise.targetSets}
+                                        </span>
+                                      </div>
+                                    }
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <p className="text-xs text-default-500">
+                                    Reps:
+                                  </p>
+                                  <Input
+                                    size="sm"
+                                    type="number"
+                                    value={update.reps.toString()}
+                                    onChange={(e) => {
+                                      const value = parseInt(
+                                        e.target.value || "0"
+                                      );
+                                      setWorkoutUpdates({
+                                        ...workoutUpdates,
+                                        [exerciseId]: {
+                                          ...update,
+                                          reps: value,
+                                          manuallyEdited: true,
+                                        },
+                                      });
+                                    }}
+                                    endContent={
+                                      <div className="flex items-center">
+                                        <span className="text-default-400 text-small">
+                                          / {exercise.targetReps}
+                                        </span>
+                                      </div>
+                                    }
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <p className="text-xs text-default-500">
+                                    Weight:
+                                  </p>
+                                  <Input
+                                    size="sm"
+                                    type="number"
+                                    value={convertFromStorageUnit(
+                                      update.weight,
+                                      useMetric
+                                    ).toFixed(1)}
+                                    onChange={(e) => {
+                                      const displayValue = parseFloat(
+                                        e.target.value || "0"
+                                      );
+                                      const storageValue = convertToStorageUnit(
+                                        displayValue,
+                                        useMetric
+                                      );
+
+                                      setWorkoutUpdates({
+                                        ...workoutUpdates,
+                                        [exerciseId]: {
+                                          ...update,
+                                          weight: storageValue,
+                                          manuallyEdited: true,
+                                        },
+                                      });
+                                    }}
+                                    endContent={
+                                      <div className="flex items-center">
+                                        <span className="text-default-400 text-small">
+                                          {useMetric ? "kg" : "lbs"}
+                                        </span>
+                                      </div>
+                                    }
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Show the changes against workout defaults separately */}
+                              {isDifferent && (
+                                <div className="mt-3 pl-7 text-xs text-default-500">
+                                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                    <span>Changes from workout defaults:</span>
+                                    {update.sets !== exercise.targetSets && (
+                                      <span>
+                                        Sets: {exercise.targetSets} →{" "}
+                                        <strong>{update.sets}</strong>
+                                      </span>
+                                    )}
+                                    {update.reps !== exercise.targetReps && (
+                                      <span>
+                                        Reps: {exercise.targetReps} →{" "}
+                                        <strong>{update.reps}</strong>
+                                      </span>
+                                    )}
+                                    {update.weight !==
+                                      exercise.targetWeight && (
+                                      <span>
+                                        Weight:{" "}
+                                        {displayWeight(
+                                          exercise.targetWeight,
+                                          useMetric
+                                        )}{" "}
+                                        →{" "}
+                                        <strong>
+                                          {displayWeight(
+                                            update.weight,
+                                            useMetric
+                                          )}
+                                        </strong>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                      )}
+                    </div>
                   )}
                 </div>
               </ModalBody>
@@ -2284,13 +2544,40 @@ export default function WorkoutSession() {
                       prMap.set(`${pr.exercise_id}`, pr.max_weight || 0);
                     });
 
+                    // Get the original workout exercise IDs
+                    const originalExerciseIds = new Set(
+                      workoutExercises.map((ex: any) => ex.id)
+                    );
+
+                    // Track new exercises (added during session but not in original workout)
+                    const newExercises: typeof newExercisesToAdd = {};
+                    // Track removed exercises (were in original workout but removed during session)
+                    const removedExercises: typeof exercisesToRemove = {};
+
+                    // Find exercises that were in the original workout but removed during session
+                    workoutExercises.forEach((originalEx: any) => {
+                      const stillExists = sessionExercises.some(
+                        (ex) => ex.id === originalEx.id
+                      );
+                      if (!stillExists) {
+                        removedExercises[originalEx.id] = {
+                          name: originalEx.name,
+                          selected: true,
+                        };
+                        hasUpdatesToSuggest = true;
+                      }
+                    });
+
                     // Calculate suggested updates with better PR detection
                     sessionExercises.forEach((exercise) => {
                       const completedSets = exercise.actualSets.filter(
                         (set) => set.completed
                       );
+                      const isNewExercise = !originalExerciseIds.has(
+                        exercise.id
+                      );
+
                       if (completedSets.length > 0) {
-                        // Get the best metrics from completed sets
                         const bestWeight = Math.max(
                           ...completedSets.map((set) => set.weight || 0)
                         );
@@ -2300,32 +2587,51 @@ export default function WorkoutSession() {
 
                         const isPR = bestWeight > (prMap.get(exercise.id) || 0);
 
-                        // Define shouldUpdate - typically we should update if there's a PR or significant change
-                        const shouldUpdate =
-                          isPR ||
-                          completedSets.length !== exercise.targetSets ||
-                          bestReps !== exercise.targetReps ||
-                          bestWeight > exercise.targetWeight;
-
-                        // Flag if we have any updates to suggest (used for modal display logic)
-                        if (shouldUpdate) {
+                        if (isNewExercise) {
+                          newExercises[exercise.id] = {
+                            name: exercise.name,
+                            sets: completedSets.length,
+                            reps: bestReps,
+                            weight: bestWeight,
+                            selected: true,
+                          };
                           hasUpdatesToSuggest = true;
-                        }
+                        } else {
+                          const shouldUpdate =
+                            isPR ||
+                            completedSets.length !== exercise.targetSets ||
+                            bestReps !== exercise.targetReps ||
+                            bestWeight > exercise.targetWeight;
 
-                        // Now with valid type and defined shouldUpdate
-                        updates[exercise.id] = {
-                          sets: completedSets.length,
-                          reps: bestReps,
-                          weight: bestWeight,
-                          selected: shouldUpdate,
-                          isPR,
-                          manuallyEdited: false,
+                          if (shouldUpdate) {
+                            hasUpdatesToSuggest = true;
+                          }
+
+                          updates[exercise.id] = {
+                            sets: completedSets.length,
+                            reps: bestReps,
+                            weight: bestWeight,
+                            selected: shouldUpdate,
+                            isPR,
+                            manuallyEdited: false,
+                          };
+                        }
+                      } else if (isNewExercise) {
+                        newExercises[exercise.id] = {
+                          name: exercise.name,
+                          sets: exercise.targetSets,
+                          reps: exercise.targetReps,
+                          weight: exercise.targetWeight,
+                          selected: false,
                         };
+                        hasUpdatesToSuggest = true;
                       }
                     });
 
                     if (hasUpdatesToSuggest) {
                       setWorkoutUpdates(updates);
+                      setNewExercisesToAdd(newExercises);
+                      setExercisesToRemove(removedExercises);
                       setShowUpdateWorkoutModal(true);
                     } else {
                       // If no updates to suggest, proceed with normal flow
