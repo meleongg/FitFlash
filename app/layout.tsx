@@ -4,7 +4,6 @@ import { NextUIProvider } from "@nextui-org/react";
 import { Metadata, Viewport } from "next";
 import { Toaster } from "sonner";
 import "./globals.css";
-import { Providers } from "./providers";
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -95,13 +94,11 @@ export default function RootLayout({
       <body>
         <ConditionalThemeProvider>
           <NextUIProvider>
-            <Providers>
-              <SessionProvider>
-                <main className="min-h-screen flex flex-col justify-center align-centre">
-                  {children}
-                </main>
-              </SessionProvider>
-            </Providers>
+            <SessionProvider>
+              <main className="min-h-screen flex flex-col justify-center align-centre">
+                {children}
+              </main>
+            </SessionProvider>
             <Toaster position="top-center" richColors />
           </NextUIProvider>
         </ConditionalThemeProvider>

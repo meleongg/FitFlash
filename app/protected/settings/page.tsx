@@ -610,19 +610,7 @@ export default function SettingsPage() {
                     onValueChange={(isSelected) =>
                       setPreferences({ ...preferences, useMetric: isSelected })
                     }
-                    thumbIcon={({ isSelected, className }) =>
-                      isSelected ? (
-                        <Weight
-                          className={`${className} text-gray-700 dark:text-gray-200`}
-                          size={14}
-                        />
-                      ) : (
-                        <Weight
-                          className={`${className} text-gray-700 dark:text-gray-200`}
-                          size={14}
-                        />
-                      )
-                    }
+                    thumbIcon={<Weight className="text-gray-700" size={14} />}
                     className="self-start sm:self-center"
                   />
                 </div>
@@ -637,18 +625,8 @@ export default function SettingsPage() {
                   <Switch
                     size="lg"
                     color="primary"
-                    startContent={
-                      <Sun
-                        size={18}
-                        className="text-gray-700 dark:text-yellow-200"
-                      />
-                    }
-                    endContent={
-                      <Moon
-                        size={18}
-                        className="text-gray-700 dark:text-blue-200"
-                      />
-                    }
+                    startContent={<Sun size={18} className="text-gray-700" />}
+                    endContent={<Moon size={18} className="text-gray-700" />}
                     isSelected={preferences.useDarkMode}
                     onValueChange={(isSelected) => {
                       // Apply theme change immediately
