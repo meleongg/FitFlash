@@ -597,7 +597,7 @@ export default function SettingsPage() {
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                   <div className="space-y-1">
                     <p className="font-medium">Weight Units</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
                       Choose between metric (kg) and imperial (lbs)
                     </p>
                   </div>
@@ -612,9 +612,15 @@ export default function SettingsPage() {
                     }
                     thumbIcon={({ isSelected, className }) =>
                       isSelected ? (
-                        <Weight className={className} size={14} />
+                        <Weight
+                          className={`${className} text-gray-700 dark:text-gray-200`}
+                          size={14}
+                        />
                       ) : (
-                        <Weight className={className} size={14} />
+                        <Weight
+                          className={`${className} text-gray-700 dark:text-gray-200`}
+                          size={14}
+                        />
                       )
                     }
                     className="self-start sm:self-center"
@@ -624,15 +630,25 @@ export default function SettingsPage() {
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                   <div className="space-y-1">
                     <p className="font-medium">Theme</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
                       Choose between light and dark mode
                     </p>
                   </div>
                   <Switch
                     size="lg"
                     color="primary"
-                    startContent={<Sun size={18} />}
-                    endContent={<Moon size={18} />}
+                    startContent={
+                      <Sun
+                        size={18}
+                        className="text-gray-700 dark:text-yellow-200"
+                      />
+                    }
+                    endContent={
+                      <Moon
+                        size={18}
+                        className="text-gray-700 dark:text-blue-200"
+                      />
+                    }
                     isSelected={preferences.useDarkMode}
                     onValueChange={(isSelected) => {
                       // Apply theme change immediately
@@ -671,7 +687,7 @@ export default function SettingsPage() {
               <CardBody className="space-y-8 px-4 md:px-6">
                 <div className="flex flex-col space-y-2">
                   <p className="font-medium">Workout Time Estimation</p>
-                  <p className="text-sm text-gray-500 mb-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                     Set your typical rest duration between sets. This helps
                     calculate more accurate workout time estimates.
                   </p>

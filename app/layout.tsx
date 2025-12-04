@@ -1,4 +1,4 @@
-import { ThemeProvider } from "@/components/theme-provider";
+import { ConditionalThemeProvider } from "@/components/conditional-theme-provider";
 import { SessionProvider } from "@/contexts/SessionContext";
 import { NextUIProvider } from "@nextui-org/react";
 import { Metadata, Viewport } from "next";
@@ -93,7 +93,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
+        <ConditionalThemeProvider>
           <NextUIProvider>
             <Providers>
               <SessionProvider>
@@ -104,7 +104,7 @@ export default function RootLayout({
             </Providers>
             <Toaster position="top-center" richColors />
           </NextUIProvider>
-        </ThemeProvider>
+        </ConditionalThemeProvider>
       </body>
     </html>
   );
