@@ -1875,26 +1875,21 @@ export default function WorkoutSession() {
         isOpen={showUpdateWorkoutModal}
         onClose={() => {
           setShowUpdateWorkoutModal(false);
-          setTimeout(async () => {
-            try {
-              await finalizeSession(new Date().toISOString());
-            } catch (err) {
-              console.error("Session finalization failed:", err);
-              toast.error("Failed to complete workout session");
-              setIsSubmitting(false);
-            }
-          }, 100);
+          setCompletingWorkout(false);
+          setIsSubmitting(false);
         }}
+        isDismissable={false}
+        hideCloseButton={false}
         size="lg"
         placement="top"
         backdrop="opaque"
         scrollBehavior="inside"
         classNames={{
-          base: "max-w-[95%] sm:max-w-3xl mx-auto max-h-[80vh] sm:max-h-[80vh]", // Reduced from 90vh to 80vh
-          wrapper: "items-start justify-center p-2 pt-4 mb-16", // Added mb-16 for bottom margin
+          base: "max-w-[95%] sm:max-w-3xl mx-auto max-h-[80vh] sm:max-h-[80vh]",
+          wrapper: "items-start justify-center p-2 pt-4 mb-16",
           header:
             "pb-0 border-b border-default-200 sticky top-0 z-10 bg-background",
-          body: "p-4 overflow-auto pb-32", // Keep existing padding
+          body: "p-4 overflow-auto pb-32",
           footer:
             "pt-3 px-6 pb-5 flex flex-col sm:flex-row gap-3 justify-end sticky bottom-0 left-0 right-0 z-20 bg-background border-t border-default-200",
           closeButton: "top-3 right-3",
@@ -2281,8 +2276,19 @@ export default function WorkoutSession() {
               </ModalBody>
               <ModalFooter>
                 <Button
+                  variant="light"
+                  onPress={() => {
+                    // Go back to workout session without submitting
+                    setShowUpdateWorkoutModal(false);
+                    setCompletingWorkout(false);
+                    setIsSubmitting(false);
+                    toast.info("Returned to workout session");
+                  }}
+                >
+                  ← Go Back
+                </Button>
+                <Button
                   variant="flat"
-                  fullWidth
                   onPress={async () => {
                     setShowUpdateWorkoutModal(false);
                     setTimeout(async () => {
@@ -2296,11 +2302,10 @@ export default function WorkoutSession() {
                     }, 100);
                   }}
                 >
-                  Skip
+                  Skip & Finish
                 </Button>
                 <Button
                   color="primary"
-                  fullWidth
                   onPress={() => {
                     setShowUpdateWorkoutModal(false);
                     setTimeout(() => {
@@ -2308,7 +2313,7 @@ export default function WorkoutSession() {
                     }, 100);
                   }}
                 >
-                  Update Workout
+                  Update & Finish
                 </Button>
               </ModalFooter>
             </>
