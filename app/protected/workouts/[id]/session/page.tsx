@@ -639,17 +639,17 @@ export default function WorkoutSession() {
           ...completedSets.map((set) => (set.weight || 0) * (set.reps || 0))
         );
 
-        // Get existing PRs for this exercise
-        const existingPR = prMap.get(exercise.id) || {
-          maxWeight: 0,
-          maxReps: 0,
-          maxVolume: 0,
-        };
+        // Get existing PRs for this exercise (if any exist in analytics)
+        const existingPR = prMap.get(exercise.id);
+        const hasExistingRecord = !!existingPR;
 
-        // Check each PR type
-        const isWeightPR = bestWeight > existingPR.maxWeight;
-        const isRepsPR = bestReps > existingPR.maxReps;
-        const isVolumePR = bestVolume > existingPR.maxVolume;
+        // Only count as PR if there's an existing record to beat
+        // First-time exercises establish a baseline, not a PR
+        const isWeightPR =
+          hasExistingRecord && bestWeight > existingPR.maxWeight;
+        const isRepsPR = hasExistingRecord && bestReps > existingPR.maxReps;
+        const isVolumePR =
+          hasExistingRecord && bestVolume > existingPR.maxVolume;
         const hasAnyPR = isWeightPR || isRepsPR || isVolumePR;
 
         if (isNewExercise) {
@@ -879,12 +879,11 @@ export default function WorkoutSession() {
 
           updateCount++;
 
-          // If any PR was achieved, update the analytics table
-          const hasAnyPR =
-            update.isWeightPR || update.isRepsPR || update.isVolumePR;
-          if (hasAnyPR) {
+          // Always update analytics to establish baseline or improve existing records
+          // This handles both first-time exercises and PR updates
+          if (update.weight > 0 || update.reps > 0) {
             try {
-              // First, get existing analytics to only update fields that are actually PRs
+              // First, get existing analytics to only update fields that are improvements
               const { data: existingAnalytics } = await supabase
                 .from("analytics")
                 .select("max_weight, max_reps, max_volume")
@@ -896,20 +895,20 @@ export default function WorkoutSession() {
               const currentMaxReps = existingAnalytics?.max_reps || 0;
               const currentMaxVolume = existingAnalytics?.max_volume || 0;
 
+              // For first-time exercises or improvements, update the value
+              const newMaxWeight = Math.max(update.weight, currentMaxWeight);
+              const newMaxReps = Math.max(update.reps, currentMaxReps);
+              const newMaxVolume = Math.max(update.volume, currentMaxVolume);
+
               const { error: analyticsError } = await supabase
                 .from("analytics")
                 .upsert(
                   {
                     user_id: user.id,
                     exercise_id: update.exercise_id,
-                    // Only update if it's actually a PR, otherwise keep existing
-                    max_weight: update.isWeightPR
-                      ? update.weight
-                      : currentMaxWeight,
-                    max_reps: update.isRepsPR ? update.reps : currentMaxReps,
-                    max_volume: update.isVolumePR
-                      ? update.volume
-                      : currentMaxVolume,
+                    max_weight: newMaxWeight,
+                    max_reps: newMaxReps,
+                    max_volume: newMaxVolume,
                     updated_at: new Date().toISOString(),
                   },
                   {
@@ -2718,14 +2717,22 @@ export default function WorkoutSession() {
                           )
                         );
 
+                        // Check if user has existing analytics record for this exercise
+                        const hasExistingRecord = prMap.has(exercise.id);
                         const existingPR = prMap.get(exercise.id) || {
                           maxWeight: 0,
                           maxReps: 0,
                           maxVolume: 0,
                         };
-                        const isWeightPR = bestWeight > existingPR.maxWeight;
-                        const isRepsPR = bestReps > existingPR.maxReps;
-                        const isVolumePR = bestVolume > existingPR.maxVolume;
+                        // Only count as PR if user has previous record to compare against
+                        const isWeightPR =
+                          hasExistingRecord &&
+                          bestWeight > existingPR.maxWeight;
+                        const isRepsPR =
+                          hasExistingRecord && bestReps > existingPR.maxReps;
+                        const isVolumePR =
+                          hasExistingRecord &&
+                          bestVolume > existingPR.maxVolume;
                         const hasAnyPR = isWeightPR || isRepsPR || isVolumePR;
 
                         if (isNewExercise) {
