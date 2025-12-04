@@ -3,7 +3,7 @@
 import PageTitle from "@/components/ui/page-title";
 import { useUnitPreference } from "@/hooks/useUnitPreference";
 import { createClient } from "@/utils/supabase/client";
-import { displayWeight, kgToLbs } from "@/utils/units";
+import { displayWeight, displayVolume, kgToLbs, roundTo } from "@/utils/units";
 import {
   Button,
   Card,
@@ -172,9 +172,9 @@ export default function AnalyticsPage() {
     fetchData();
   }, []);
 
-  // Add this useEffect to process data whenever selectedExercise changes or tab switches to "progress"
+  // Add this useEffect to process data whenever selectedExercise changes, tab switches to "progress", or unit preference changes
   useEffect(() => {
-    if (selectedExercise && activeTab === "progress" && !isChartLoading) {
+    if (selectedExercise && activeTab === "progress" && sessions.length > 0) {
       setIsChartLoading(true);
 
       try {
@@ -188,7 +188,7 @@ export default function AnalyticsPage() {
         setIsChartLoading(false);
       }
     }
-  }, [selectedExercise, activeTab]);
+  }, [selectedExercise, activeTab, useMetric, sessions, selectedTimeframe]);
 
   // Add this useEffect after your other useEffects
   useEffect(() => {
@@ -323,11 +323,13 @@ export default function AnalyticsPage() {
     const chartData = filteredDates
       .map((date) => {
         const sessions = groupedByDate[date];
-        const maxWeight = Math.max(...sessions.map((s: any) => s.weight));
-        const totalVolume = sessions.reduce(
+        const maxWeightKg = Math.max(...sessions.map((s: any) => s.weight));
+        const totalVolumeKg = sessions.reduce(
           (sum: number, s: any) => sum + s.reps * s.weight,
           0
         );
+        const maxWeight = useMetric ? maxWeightKg : kgToLbs(maxWeightKg);
+        const totalVolume = useMetric ? totalVolumeKg : kgToLbs(totalVolumeKg);
 
         return {
           date,
@@ -702,7 +704,7 @@ export default function AnalyticsPage() {
                             />
                             <RechartsTooltip
                               formatter={(value) => [
-                                displayWeight(Number(value), useMetric),
+                                `${roundTo(Number(value), 1)} ${useMetric ? "kg" : "lbs"}`,
                                 "Max Weight",
                               ]}
                               labelFormatter={(date) => `Date: ${date}`}
@@ -778,7 +780,7 @@ export default function AnalyticsPage() {
                             />
                             <RechartsTooltip
                               formatter={(value) => [
-                                displayWeight(Number(value), useMetric),
+                                displayVolume(Number(value), useMetric, true),
                                 "Total Volume",
                               ]}
                               labelFormatter={(date) => `Date: ${date}`}
@@ -1055,7 +1057,7 @@ export default function AnalyticsPage() {
                           axisLine={false}
                           tickLine={false}
                           tickFormatter={(value) =>
-                            `${(useMetric ? value : kgToLbs(value)).toFixed(0)}`
+                            `${Math.round(useMetric ? value : kgToLbs(value)).toLocaleString()}`
                           }
                         />
                         <YAxis
@@ -1073,7 +1075,7 @@ export default function AnalyticsPage() {
                         />
                         <RechartsTooltip
                           formatter={(value) => [
-                            displayWeight(Number(value), useMetric),
+                            displayVolume(Number(value), useMetric),
                             "Volume",
                           ]}
                           labelFormatter={(name) => `Exercise: ${name}`}

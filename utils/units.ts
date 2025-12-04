@@ -1,19 +1,68 @@
+// Conversion constant - use a precise value
+const KG_TO_LBS = 2.20462262185;
+
+// Common plate weights in lbs that users typically use
+// This helps us "snap" to standard weights when converting back from kg
+const COMMON_LBS_WEIGHTS = [
+  2.5, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90,
+  95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165,
+  170, 175, 180, 185, 190, 195, 200, 205, 210, 215, 220, 225, 230, 235, 240,
+  245, 250, 255, 260, 265, 270, 275, 280, 285, 290, 295, 300, 315, 335, 350,
+  365, 385, 400, 405, 425, 450, 475, 495, 500, 515, 545, 585, 600, 635, 675,
+  700, 725, 765, 800, 855, 900, 945, 1000,
+];
+
 /**
- * Convert kilograms to pounds
- * @param kg Weight in kilograms
- * @returns Weight in pounds
+ * Round to a specific number of decimal places to avoid floating point errors
+ * @param value Number to round
+ * @param decimals Number of decimal places
+ * @returns Rounded number
  */
-export const kgToLbs = (kg: number): number => {
-  return kg * 2.20462;
+export const roundTo = (value: number, decimals: number): number => {
+  const factor = Math.pow(10, decimals);
+  return Math.round(value * factor) / factor;
 };
 
 /**
- * Convert pounds to kilograms
+ * Snap a weight to the nearest common lbs value if within tolerance
+ * This helps recover the original lbs value after kg round-trip
  * @param lbs Weight in pounds
- * @returns Weight in kilograms
+ * @param tolerance How close (in lbs) to snap (default 0.5)
+ * @returns Snapped weight or original if no match
+ */
+const snapToCommonWeight = (lbs: number, tolerance: number = 0.5): number => {
+  for (const common of COMMON_LBS_WEIGHTS) {
+    if (Math.abs(lbs - common) <= tolerance) {
+      return common;
+    }
+  }
+  // Also check for 2.5 lb increments (common in gyms)
+  const nearest2_5 = Math.round(lbs / 2.5) * 2.5;
+  if (Math.abs(lbs - nearest2_5) <= tolerance) {
+    return nearest2_5;
+  }
+  return roundTo(lbs, 1);
+};
+
+/**
+ * Convert kilograms to pounds
+ * @param kg Weight in kilograms
+ * @param snap Whether to snap to common weights (default true for display)
+ * @returns Weight in pounds
+ */
+export const kgToLbs = (kg: number, snap: boolean = true): number => {
+  const rawLbs = kg * KG_TO_LBS;
+  return snap ? snapToCommonWeight(rawLbs) : roundTo(rawLbs, 2);
+};
+
+/**
+ * Convert pounds to kilograms (for storage)
+ * @param lbs Weight in pounds
+ * @returns Weight in kilograms (rounded to 4 decimal places for precision)
  */
 export const lbsToKg = (lbs: number): number => {
-  return lbs / 2.20462;
+  // Use higher precision for storage to allow accurate round-trip
+  return roundTo(lbs / KG_TO_LBS, 4);
 };
 
 /**
@@ -73,8 +122,8 @@ export const calculateVolume = (
   // Always calculate volume in storage units first (kg)
   const volumeInKg = Number(weight) * Number(reps);
 
-  // Then convert if needed
-  return useMetric ? volumeInKg : kgToLbs(volumeInKg);
+  // Then convert if needed - use raw conversion for volume (no snapping)
+  return useMetric ? volumeInKg : kgToLbs(volumeInKg, false);
 };
 
 /**
@@ -100,11 +149,39 @@ export const displayWeight = (
   // Convert the weight if necessary - assumes DB stores in kg
   const convertedWeight = useMetric ? numWeight : kgToLbs(numWeight);
 
-  // Format with specified precision
-  const formattedWeight = parseFloat(convertedWeight.toFixed(precision));
+  // Format with specified precision, using roundTo for consistency
+  const formattedWeight = roundTo(convertedWeight, precision);
 
   // Return with or without unit
   return includeUnit
     ? `${formattedWeight} ${useMetric ? "kg" : "lbs"}`
     : String(formattedWeight);
+};
+
+/**
+ * Format large volume numbers for display (e.g., in charts)
+ * @param volume Volume value (already in display units or in kg)
+ * @param useMetric Whether to display in metric or imperial
+ * @param isAlreadyConverted Whether the volume is already in display units
+ * @returns Formatted volume string
+ */
+export const displayVolume = (
+  volume: number,
+  useMetric: boolean,
+  isAlreadyConverted: boolean = false
+): string => {
+  const numVolume = Number(volume);
+  if (isNaN(numVolume) || numVolume === 0) return "-";
+
+  // If not already converted, convert from kg (use raw conversion, no snapping)
+  const convertedVolume = isAlreadyConverted 
+    ? numVolume 
+    : (useMetric ? numVolume : kgToLbs(numVolume, false));
+  
+  // For large numbers, round to whole numbers to avoid messy decimals
+  if (convertedVolume >= 1000) {
+    return `${Math.round(convertedVolume).toLocaleString()} ${useMetric ? "kg" : "lbs"}`;
+  }
+  
+  return `${roundTo(convertedVolume, 1)} ${useMetric ? "kg" : "lbs"}`;
 };
