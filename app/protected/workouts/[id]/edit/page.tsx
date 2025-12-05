@@ -1216,23 +1216,20 @@ export default function EditWorkout() {
               </ModalContent>
             </Modal>
 
-            {/* Modal for Adding Custom Exercise - Updated for proper mobile centering */}
+            {/* Modal for Adding Custom Exercise */}
             <Modal
               backdrop="opaque"
               isOpen={isCustomOpen}
               onClose={onCustomClose}
               radius="lg"
               onOpenChange={onCustomOpenChange}
-              placement="top" // Changed from center to top
-              scrollBehavior="inside"
+              placement="center"
               classNames={{
-                base: "max-w-[95%] sm:max-w-md mx-auto max-h-[80vh]", // Add max width/height constraints
-                wrapper: "items-start sm:items-center justify-center p-2 pt-8", // Position better on mobile
-                header:
-                  "pb-0 border-b border-default-200 sticky top-0 z-10 bg-background", // Make header sticky
-                body: "p-4 overflow-auto pb-12", // Add bottom padding for keyboard
+                base: "max-w-[95%] sm:max-w-md mx-auto",
+                wrapper: "items-center justify-center p-2",
+                body: "p-4",
                 footer:
-                  "pt-3 px-6 pb-5 flex flex-row gap-3 justify-end sticky bottom-0 z-10 bg-background border-t border-default-200", // Make footer sticky
+                  "pt-3 px-6 pb-5 flex flex-row gap-3 justify-end border-t border-default-200",
               }}
             >
               <ModalContent>

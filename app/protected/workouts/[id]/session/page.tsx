@@ -2476,7 +2476,7 @@ export default function WorkoutSession() {
         onClose={onCustomClose}
         radius="lg"
         onOpenChange={onCustomOpenChange}
-        placement="top" // Changed from center to top
+        placement="center"
         scrollBehavior="inside"
         classNames={{
           base: "m-0 mx-auto max-w-[95%] max-h-[80vh]", // Add max width/height constraints
