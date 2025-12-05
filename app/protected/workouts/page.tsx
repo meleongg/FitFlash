@@ -137,13 +137,15 @@ const Actions = ({
           </div>
         </DropdownTrigger>
         <DropdownMenu>
-          <DropdownItem key="view" as={Link} href={`/protected/workouts/${id}`}>
+          <DropdownItem
+            key="view"
+            onPress={() => router.push(`/protected/workouts/${id}`)}
+          >
             View
           </DropdownItem>
           <DropdownItem
             key="edit"
-            as={Link}
-            href={`/protected/workouts/${id}/edit`}
+            onPress={() => router.push(`/protected/workouts/${id}/edit`)}
           >
             Edit
           </DropdownItem>
