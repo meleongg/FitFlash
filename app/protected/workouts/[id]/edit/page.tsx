@@ -977,15 +977,13 @@ export default function EditWorkout() {
                   onDeleteClose();
                 }}
                 radius="lg"
-                placement="top" // Changed from center to top
-                scrollBehavior="inside"
+                placement="center"
                 classNames={{
-                  base: "max-w-[95%] sm:max-w-md mx-auto max-h-[80vh]", // Add max height
-                  wrapper:
-                    "items-start sm:items-center justify-center p-2 pt-8", // Align to top on mobile, center on desktop
-                  body: "p-4", // Simple modal doesn't need extra padding
+                  base: "max-w-[95%] sm:max-w-md mx-auto",
+                  wrapper: "items-center justify-center p-2",
+                  body: "p-4",
                   footer:
-                    "pt-3 px-6 pb-5 flex flex-row gap-3 justify-end sticky bottom-0 z-10 bg-background border-t border-default-200", // Make footer sticky
+                    "pt-3 px-6 pb-5 flex flex-row gap-3 justify-end border-t border-default-200",
                 }}
               >
                 <ModalContent>
