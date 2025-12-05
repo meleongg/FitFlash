@@ -246,10 +246,10 @@ export default function ExerciseLibraryPage() {
         return;
       }
 
-      // Delete the exercise - FK constraints:
+      // Delete the exercise - FK constraints (all CASCADE):
       // - workout_exercises: CASCADE (removes from workouts)
-      // - session_exercises: SET NULL (preserves history, shows as "Deleted Exercise")
-      // - analytics: SET NULL (preserves PRs, shows as "Deleted Exercise")
+      // - session_exercises: CASCADE (removes session history)
+      // - analytics: CASCADE (removes PRs)
       const { error } = await supabase
         .from("exercises")
         .delete()
@@ -810,20 +810,20 @@ export default function ExerciseLibraryPage() {
                 {/* Warning about deletion effects */}
                 <div className="mt-3 p-3 bg-danger-50 dark:bg-danger-900/20 rounded-lg border border-danger-200 dark:border-danger-800">
                   <p className="text-sm text-danger-700 dark:text-danger-300 font-medium mb-2">
-                    ⚠️ This action will:
+                    ⚠️ This will permanently delete:
                   </p>
                   <ul className="text-sm text-danger-600 dark:text-danger-400 list-disc list-inside space-y-1">
-                    <li>Remove this exercise from your library</li>
-                    <li>Remove this exercise from all current workouts</li>
+                    <li>This exercise from your library</li>
+                    <li>This exercise from all your workouts</li>
+                    <li>All session history with this exercise</li>
+                    <li>All analytics and personal records</li>
                   </ul>
                 </div>
 
-                {/* Info about preserved data */}
-                <div className="mt-3 p-3 bg-default-100 dark:bg-default-50/10 rounded-lg">
-                  <p className="text-sm text-default-600 dark:text-default-400">
-                    <strong>Note:</strong> Your session history and analytics/PRs will be preserved and shown as "Deleted Exercise".
-                  </p>
-                </div>
+                {/* Emphasis on irreversibility */}
+                <p className="mt-3 text-sm text-default-500">
+                  This action cannot be undone.
+                </p>
               </ModalBody>
               <ModalFooter>
                 <Button
