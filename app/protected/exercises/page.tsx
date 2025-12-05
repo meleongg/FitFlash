@@ -34,6 +34,7 @@ import {
   LayersIcon,
   PlusIcon,
   SearchIcon,
+  Trash2Icon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -64,6 +65,15 @@ export default function ExerciseLibraryPage() {
     useState("All Exercises");
   const [isSaving, setIsSaving] = useState(false);
   const [searchPerformed, setSearchPerformed] = useState(false);
+
+  // Delete exercise state
+  const {
+    isOpen: isDeleteOpen,
+    onOpen: onDeleteOpen,
+    onClose: onDeleteClose,
+  } = useDisclosure();
+  const [exerciseToDelete, setExerciseToDelete] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch exercises and categories
   useEffect(() => {
@@ -211,6 +221,58 @@ export default function ExerciseLibraryPage() {
       console.error("Error saving exercise:", error);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Handle opening delete modal
+  const handleDeleteExercise = (exercise: any) => {
+    setExerciseToDelete(exercise);
+    onDeleteOpen();
+  };
+
+  // Handle confirming delete
+  const confirmDeleteExercise = async () => {
+    if (!exerciseToDelete) return;
+
+    try {
+      setIsDeleting(true);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        toast.error("Not authenticated");
+        return;
+      }
+
+      // Delete the exercise - FK constraints:
+      // - workout_exercises: CASCADE (removes from workouts)
+      // - session_exercises: SET NULL (preserves history, shows as "Deleted Exercise")
+      // - analytics: SET NULL (preserves PRs, shows as "Deleted Exercise")
+      const { error } = await supabase
+        .from("exercises")
+        .delete()
+        .eq("id", exerciseToDelete.id)
+        .eq("user_id", user.id); // Safety: only delete user's own exercises
+
+      if (error) {
+        toast.error("Failed to delete exercise");
+        throw error;
+      }
+
+      // Remove from local state
+      setExercises((prev) =>
+        prev.filter((ex) => ex.id !== exerciseToDelete.id)
+      );
+
+      toast.success(`${exerciseToDelete.name} deleted`);
+      onDeleteClose();
+      setExerciseToDelete(null);
+    } catch (error) {
+      console.error("Error deleting exercise:", error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -545,6 +607,7 @@ export default function ExerciseLibraryPage() {
                       key={exercise.id}
                       exercise={exercise}
                       onEdit={handleEditExercise}
+                      onDelete={handleDeleteExercise}
                     />
                   ))}
                 </div>
@@ -572,6 +635,7 @@ export default function ExerciseLibraryPage() {
                           key={exercise.id}
                           exercise={exercise}
                           onEdit={handleEditExercise}
+                          onDelete={handleDeleteExercise}
                           animationDelay={exIndex * 30}
                         />
                       )
@@ -584,23 +648,19 @@ export default function ExerciseLibraryPage() {
         )}
       </div>
 
-      {/* Add/Edit Exercise Modal - Updated for mobile */}
+      {/* Add/Edit Exercise Modal */}
       <Modal
         isOpen={isOpen}
         onClose={() => {
           if (!isSaving) onClose();
         }}
-        placement="top" // Changed from center to top
-        scrollBehavior="inside"
+        placement="center"
         classNames={{
-          base: "max-w-[95%] sm:max-w-md mx-auto max-h-[70vh]", // Reduced max height
-          wrapper: "items-start justify-center p-2 pt-4", // Less top padding
-          header:
-            "pb-0 border-b border-default-200 sticky top-0 z-20 bg-background", // Higher z-index
-          body: "p-4 overflow-auto pb-24", // More bottom padding for keyboard space
+          base: "max-w-[95%] sm:max-w-md mx-auto",
+          wrapper: "items-center justify-center p-2",
+          body: "p-4",
           footer:
-            "pt-3 px-6 pb-5 flex flex-row gap-3 justify-end fixed bottom-0 left-0 right-0 z-20 bg-background border-t border-default-200 w-full", // Changed to fixed positioning
-          closeButton: "top-3 right-3 z-20", // Ensure close button is above content
+            "pt-3 px-6 pb-5 flex flex-row gap-3 justify-end border-t border-default-200",
         }}
       >
         <ModalContent className="max-w-md mx-auto">
@@ -610,9 +670,7 @@ export default function ExerciseLibraryPage() {
                 {editExercise ? "Edit Exercise" : "Add New Exercise"}
               </ModalHeader>
               <ModalBody>
-                <div className="space-y-5 pb-12">
-                  {" "}
-                  {/* Add extra padding at the bottom */}
+                <div className="space-y-5">
                   <Input
                     label="Exercise Name"
                     placeholder="Enter exercise name"
@@ -716,6 +774,83 @@ export default function ExerciseLibraryPage() {
         </ModalContent>
       </Modal>
 
+      {/* Delete Exercise Confirmation Modal */}
+      <Modal
+        isOpen={isDeleteOpen}
+        onClose={() => {
+          if (!isDeleting) {
+            onDeleteClose();
+            setExerciseToDelete(null);
+          }
+        }}
+        placement="center"
+        classNames={{
+          base: "max-w-[95%] sm:max-w-md mx-auto",
+          wrapper: "items-center justify-center p-2",
+          body: "p-4",
+          footer:
+            "pt-3 px-6 pb-5 flex flex-row gap-3 justify-end border-t border-default-200",
+        }}
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader className="flex flex-col gap-1">
+                <h3 className="text-lg font-bold">Delete Exercise</h3>
+              </ModalHeader>
+              <ModalBody>
+                <p>
+                  Are you sure you want to delete{" "}
+                  <span className="font-semibold">
+                    {exerciseToDelete?.name}
+                  </span>
+                  ?
+                </p>
+
+                {/* Warning about deletion effects */}
+                <div className="mt-3 p-3 bg-danger-50 dark:bg-danger-900/20 rounded-lg border border-danger-200 dark:border-danger-800">
+                  <p className="text-sm text-danger-700 dark:text-danger-300 font-medium mb-2">
+                    ⚠️ This action will:
+                  </p>
+                  <ul className="text-sm text-danger-600 dark:text-danger-400 list-disc list-inside space-y-1">
+                    <li>Remove this exercise from your library</li>
+                    <li>Remove this exercise from all current workouts</li>
+                  </ul>
+                </div>
+
+                {/* Info about preserved data */}
+                <div className="mt-3 p-3 bg-default-100 dark:bg-default-50/10 rounded-lg">
+                  <p className="text-sm text-default-600 dark:text-default-400">
+                    <strong>Note:</strong> Your session history and analytics/PRs will be preserved and shown as "Deleted Exercise".
+                  </p>
+                </div>
+              </ModalBody>
+              <ModalFooter>
+                <Button
+                  color="default"
+                  variant="light"
+                  onPress={() => {
+                    onClose();
+                    setExerciseToDelete(null);
+                  }}
+                  isDisabled={isDeleting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  color="danger"
+                  onPress={confirmDeleteExercise}
+                  isLoading={isDeleting}
+                  startContent={!isDeleting && <Trash2Icon size={16} />}
+                >
+                  Delete Exercise
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
       {/* Add global styles for animations */}
       <style jsx global>{`
         @keyframes fadeIn {
@@ -740,40 +875,49 @@ export default function ExerciseLibraryPage() {
 function ExerciseCard({
   exercise,
   onEdit,
+  onDelete,
   animationDelay = 0,
 }: {
   exercise: any;
   onEdit: (exercise: any) => void;
+  onDelete: (exercise: any) => void;
   animationDelay?: number;
 }) {
   return (
     <Card
       className="hover:shadow-md transition-all duration-200 border border-transparent hover:border-primary/20 animate-fadeIn"
-      isPressable={!exercise.is_default}
-      onPress={() => !exercise.is_default && onEdit(exercise)}
       style={{ animationDelay: `${animationDelay}ms` }}
     >
       <CardBody className="p-4 gap-2">
         <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-medium line-clamp-1">
-                {exercise.name}
-              </h3>
-              {exercise.is_default ? (
-                <Tooltip content="Default exercise (cannot be edited)">
-                  <Chip
-                    size="sm"
-                    color="secondary"
-                    variant="flat"
-                    className="h-5"
-                  >
-                    Default
-                  </Chip>
-                </Tooltip>
-              ) : (
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-medium line-clamp-1">
+              {exercise.name}
+            </h3>
+            <div className="flex items-center mt-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary/70 mr-1.5"></div>
+              <span className="text-xs text-default-500">
+                {exercise.category?.name || "Uncategorized"}
+              </span>
+            </div>
+          </div>
+
+          {/* Action buttons aligned to the right */}
+          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+            {exercise.is_default ? (
+              <Tooltip content="Default exercise (cannot be edited)">
+                <Chip
+                  size="sm"
+                  color="secondary"
+                  variant="flat"
+                  className="h-5"
+                >
+                  Default
+                </Chip>
+              </Tooltip>
+            ) : (
+              <>
                 <Tooltip content="Edit exercise">
-                  {/* Wrap with a div instead of span and use stopPropagation */}
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
@@ -784,14 +928,19 @@ function ExerciseCard({
                     <EditIcon size={16} />
                   </div>
                 </Tooltip>
-              )}
-            </div>
-            <div className="flex items-center mt-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-primary/70 mr-1.5"></div>
-              <span className="text-xs text-default-500">
-                {exercise.category?.name || "Uncategorized"}
-              </span>
-            </div>
+                <Tooltip content="Delete exercise">
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(exercise);
+                    }}
+                    className="flex items-center justify-center h-8 w-8 rounded-full cursor-pointer text-default-400 hover:text-danger hover:bg-danger-50"
+                  >
+                    <Trash2Icon size={16} />
+                  </div>
+                </Tooltip>
+              </>
+            )}
           </div>
         </div>
 
